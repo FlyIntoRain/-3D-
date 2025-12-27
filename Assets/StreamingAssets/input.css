@@ -1,0 +1,42 @@
+/* 1. 引入 Tailwind (v4 新语法) */
+@import "tailwindcss";
+
+/* 2. 在这里配置你的颜色和字体 (替代了以前的 js 配置文件) */
+@theme {
+  --color-primary: #8B4513;
+  --color-secondary: #D2B48C;
+  --color-accent: #CD5C5C;
+  --color-background: #F5F5DC;
+  --color-dark: #3E2723;
+  
+  --font-sans: "Noto Sans SC", sans-serif;
+}
+
+/* 3. 自定义组件 */
+@layer components {
+  .btn-primary {
+    @apply bg-primary text-white font-semibold py-2 px-4 rounded-lg shadow-md transition duration-300 ease-in-out transform hover:scale-105 active:scale-95;
+  }
+
+  .btn-secondary {
+    @apply bg-secondary text-dark font-semibold py-2 px-4 rounded-lg shadow-md transition duration-300 ease-in-out transform hover:scale-105 active:scale-95;
+  }
+
+  .panel {
+    @apply bg-white/90 rounded-xl shadow-lg border-2 border-secondary overflow-hidden;
+  }
+}
+
+/* 4. 工具类 */
+@layer utilities {
+  .content-auto {
+    content-visibility: auto;
+  }
+  
+  .joystick-thumb {
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+}

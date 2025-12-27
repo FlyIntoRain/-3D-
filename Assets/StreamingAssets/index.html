@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>寻宝游戏 - 移动端控制</title>
+    <link href="./style.css" rel="stylesheet">
+    <!-- <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet"> -->
+    <script src="./js/three.min.js"></script>
+    <script src="./js/FBXLoader.js"></script>
+
+    <style>
+        body {
+            overscroll-behavior: none;
+            background-color: #F5F5DC;
+            background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiPgogIDxkZWZzPgogICAgPHBhdHRlcm4gaWQ9ImdyaWQiIHdpZHRoPSI0MCIgaGVpZ2h0PSI0MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+CiAgICAgIDxyZWN0IHdpZHRoPSI0MCIgaGVpZ2h0PSI0MCIgZmlsbD0iI2YzZWViZSIvPgogICAgICA8cGF0aCBkPSJNMCAwaDQwdjQwSDB6Ii8+CiAgICA8L3BhdHRlcm4+CiAgPC9kZWZzPgogIDxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9InVybCgjZ3JpZCkiIC8+Cjwvc3ZnPg==');
+        }
+
+        #joystick-container {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            background-color: rgba(139, 69, 19, 0.2);
+            position: relative;
+            overflow: hidden;
+        }
+
+        #joystick-thumb {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background-color: rgba(139, 69, 19, 0.5);
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        #3d-container {
+            touch-action: none;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-tap-highlight-color: transparent;
+            cursor: grab;
+        }
+
+            #3d-container:active {
+                cursor: grabbing;
+            }
+
+        /* 触摸提示 */
+        .touch-hint {
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+
+        @keyframes pulse {
+            0% {
+                transform: scale(1);
+                opacity: 1;
+            }
+
+            50% {
+                transform: scale(1.05);
+                opacity: 0.8;
+            }
+
+            100% {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+
+        .treasure-icon {
+            animation: pulse 2s infinite;
+        }
+
+        /* 拼图游戏样式 */
+        #puzzle-area {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            grid-template-rows: repeat(3, 1fr);
+            gap: 0;
+            background-color: #ddd;
+            padding: 0;
+            position: relative;
+            box-sizing: border-box;
+        }
+
+        .puzzle-cell {
+            background-color: #fff;
+            border: 1px solid #ddd;
+            position: relative;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            box-sizing: border-box;
+        }
+
+            .puzzle-cell.highlight {
+                background-color: #ffeb3b;
+                border-color: #ffc107;
+            }
+
+        .puzzle-piece {
+            background-color: #f0f0f0;
+            border: 2px solid #8B4513;
+            border-radius: 4px;
+            cursor: move;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: none;
+            transition: transform 0.1s;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+            box-sizing: border-box;
+            flex-shrink: 0; /* 防止在flex容器中被压缩 */
+            flex-grow: 0; /* 防止在flex容器中扩展 */
+        }
+
+            .puzzle-piece[data-placed="true"] {
+                border-radius: 0;
+                border: 1px solid #ddd;
+            }
+
+            .puzzle-piece:hover {
+                transform: scale(1.05);
+                box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+            }
+
+            .puzzle-piece[data-placed="true"] {
+                cursor: move;
+                border-color: #4caf50;
+            }
+
+                .puzzle-piece[data-placed="true"]:hover {
+                    transform: scale(1.02);
+                    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+                }
+
+        #puzzle-pieces-container {
+            min-height: 120px;
+        }
+
+        #reference-image {
+            max-width: 128px;
+            max-height: 128px;
+        }
+
+        /* 背包界面样式 */
+        #inventory-overlay {
+            position: fixed;
+            inset: 0;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 60;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+            #inventory-overlay.hidden {
+                display: none;
+            }
+
+        #dialog-overlay {
+            z-index: 80;
+        }
+
+        .inventory-panel {
+            background-color: #F5F5DC;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            max-width: 90%;
+            max-height: 90vh;
+            width: 500px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .inventory-header {
+            background-color: #8B4513;
+            color: white;
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+            .inventory-header h2 {
+                margin: 0;
+                font-size: 1.25rem;
+                font-weight: bold;
+            }
+
+        #inventory-close-btn {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 1.5rem;
+            cursor: pointer;
+            padding: 0;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+            transition: background-color 0.2s;
+        }
+
+            #inventory-close-btn:hover {
+                background-color: rgba(255, 255, 255, 0.2);
+            }
+
+            #inventory-close-btn:active {
+                background-color: rgba(255, 255, 255, 0.3);
+            }
+
+        .inventory-content {
+            padding: 20px;
+            overflow-y: auto;
+            flex: 1;
+        }
+
+        #inventory-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+            gap: 15px;
+            padding: 10px 0;
+        }
+
+        .inventory-slot {
+            aspect-ratio: 1;
+            border: 2px solid #8B4513;
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+            overflow: hidden;
+            box-sizing: border-box;
+        }
+
+            .inventory-slot.obtained {
+                background-color: #fff;
+                border-color: #4caf50;
+                box-shadow: 0 2px 8px rgba(76, 175, 80, 0.3);
+            }
+
+            .inventory-slot.not-obtained {
+                background-color: #e0e0e0;
+                border-color: #9e9e9e;
+                opacity: 0.5;
+            }
+
+            .inventory-slot.obtained:hover {
+                transform: scale(1.05);
+                box-shadow: 0 4px 12px rgba(76, 175, 80, 0.5);
+            }
+
+            .inventory-slot.obtained:active {
+                transform: scale(0.98);
+            }
+
+            .inventory-slot.not-obtained:active {
+                transform: scale(0.98);
+            }
+
+        .inventory-icon {
+            width: 60%;
+            height: 60%;
+            object-fit: contain;
+            margin-bottom: 5px;
+        }
+
+        .inventory-name {
+            font-size: 0.7rem;
+            color: #666;
+            text-align: center;
+            padding: 2px 4px;
+        }
+
+        .inventory-item-name {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            font-size: 0.65rem;
+            padding: 2px 4px;
+            text-align: center;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .inventory-slot.not-obtained .inventory-item-name {
+            background-color: rgba(0, 0, 0, 0.5);
+        }
+
+        @media (max-width: 640px) {
+            .inventory-panel {
+                width: 95%;
+                max-height: 85vh;
+            }
+
+            #inventory-grid {
+                grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+                gap: 12px;
+            }
+        }
+    </style>
+</head>
+
+<body class="font-sans text-dark min-h-screen flex flex-col">
+    <!-- 顶部状态栏 -->
+    <div class="bg-primary text-white p-2 flex justify-between items-center">
+        <div class="text-lg font-bold">寻宝游戏</div>
+        <div id="connection-status" class="flex items-center">
+            <span id="status-text">未连接</span>
+            <div id="status-indicator" class="w-3 h-3 bg-red-500 rounded-full ml-2"></div>
+        </div>
+    </div>
+
+    <!-- 主游戏区域 -->
+    <div class="flex-1 p-4 flex flex-col justify-between">
+        <!-- 任务栏区域 -->
+        <div class="panel mb-4 p-4">
+            <h2 class="text-xl font-bold mb-2 text-primary">任务进度</h2>
+            <div id="task-list" class="space-y-2">
+                <div class="task-item flex justify-between items-center p-2 bg-background rounded">
+                    <span>寻找文物碎片</span>
+                    <span class="text-accent">
+                         已发现: <span id="fragment-count">0/9</span>
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 中央消息区域 -->
+        <div id="message-container" class="panel mb-4 p-4 min-h-[120px]">
+            <h2 class="text-xl font-bold mb-2 text-primary">游戏信息</h2>
+            <!-- 当前目标 + 自动追踪按钮 -->
+            <div class="flex items-center justify-between mb-2">
+                <span id="current-target-label" class="text-sm text-primary">当前目标：与 NPC 对话</span>
+                <button id="auto-track-btn" class="btn-primary text-xs px-3 py-1">自动追踪</button>
+            </div>
+            <div id="message-content" class="text-sm">
+                <p>欢迎来到寻宝游戏！</p>
+                <p>使用下方遥杆控制角色移动，寻找缺失的碎片。</p>
+            </div>
+        </div>
+
+        <!-- 遥杆和控制区域 -->
+        <div class="flex justify-between items-end pb-4">
+            <!-- 左侧遥杆 -->
+            <div id="joystick-container">
+                <div id="joystick-thumb" class="joystick-thumb"></div>
+            </div>
+
+            <!-- 右侧交互按钮 -->
+            <div class="flex flex-col space-y-3">
+                <button id="bag" class="btn-secondary">背包</button>
+                <button id="confirm" class="btn-primary">确定</button>
+                <button id="cancel" class="btn-secondary">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 底部操作栏 -->
+    <div class="bg-primary text-white p-3 flex justify-between">
+        <button id="help-btn" class="text-white">
+            <svg class="w-5 h-5 inline-block" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg> 帮助
+        </button>
+        <button id="settings-btn" class="text-white">
+            <svg class="w-5 h-5 inline-block" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg> 设置
+        </button>
+    </div>
+
+    <!-- 交互对话框 -->
+    <div id="dialog-overlay" class="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center hidden">
+        <div class="panel w-[80%] max-w-md">
+            <div class="p-4">
+                <h3 id="dialog-title" class="text-xl font-bold mb-3 text-primary">交互内容</h3>
+                <div id="dialog-content" class="mb-4 text-sm">
+                    <!-- 对话框内容将动态填充 -->
+                </div>
+                <div class="flex justify-end space-x-2 flex-wrap">
+                    <button id="dialog-cancel" class="btn-secondary">取消</button>
+                    <button id="dialog-confirm" class="btn-primary">确定</button>
+                    <button id="dialog-start-puzzle" class="btn-primary hidden">开始游戏</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 🔥 核心设置对话框（UI对齐+模式切换修复） -->
+    <div id="settings-overlay" class="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center hidden">
+        <div class="panel w-[90%] max-w-md">
+            <div class="p-4">
+                <h3 class="text-xl font-bold mb-4 text-primary">设置中心</h3>
+
+                <!-- 1. 模式切换（顶部两个toggle） -->
+                <div class="mb-6">
+                    <p class="text-sm font-semibold mb-2 text-dark">环境控制模式</p>
+                    <div class="flex space-x-6 justify-center">
+                        <label class="toggle-label flex items-center">
+                            <input type="radio" name="control-mode" value="auto" class="control-toggle" checked>
+                            <span class="ml-2">自动模式</span>
+                        </label>
+                        <label class="toggle-label flex items-center">
+                            <input type="radio" name="control-mode" value="manual" class="control-toggle">
+                            <span class="ml-2">手动模式</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- 2. 手动控制选项（两列布局，UI对齐修复） -->
+                <div id="manual-controls" class="grid grid-cols-2 gap-4 mb-6 opacity-50 pointer-events-none">
+                    <!-- 左列：时间选择（单选） -->
+                    <div class="time-group space-y-2">
+                        <p class="text-sm font-semibold mb-1 text-dark text-center">时间</p>
+                        <label class="option-label">
+                            <input type="radio" name="time" value="day" class="time-radio" checked>
+                            <span class="ml-2 flex items-center">
+                                <svg class="w-5 h-5 text-yellow-500 inline-block" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+                                <span class="ml-1">白天</span>
+                            </span>
+                        </label>
+                        <label class="option-label">
+                            <input type="radio" name="time" value="dusk" class="time-radio">
+                            <span class="ml-2 flex items-center">
+                                <svg class="w-5 h-5 text-orange-500 inline-block" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"></path></svg>
+                                <span class="ml-1">黄昏</span>
+                            </span>
+                        </label>
+                        <label class="option-label">
+                            <input type="radio" name="time" value="night" class="time-radio">
+                            <span class="ml-2 flex items-center">
+                                <svg class="w-5 h-5 text-blue-900 inline-block" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path></svg>
+                                <span class="ml-1">夜晚</span>
+                            </span>
+                        </label>
+                    </div>
+
+                    <!-- 右列：天气选择（单选） -->
+                    <div class="weather-group space-y-2">
+                        <p class="text-sm font-semibold mb-1 text-dark text-center">天气</p>
+                        <label class="option-label">
+                            <input type="radio" name="weather" value="clear" class="weather-radio" checked>
+                            <span class="ml-2 flex items-center">
+                                <svg class="w-5 h-5 text-yellow-500 inline-block" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+                                <span class="ml-1">晴天</span>
+                            </span>
+                        </label>
+                        <label class="option-label">
+                            <input type="radio" name="weather" value="cloudy" class="weather-radio">
+                            <span class="ml-2 flex items-center">
+                                <svg class="w-5 h-5 text-gray-500 inline-block" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"></path></svg>
+                                <span class="ml-1">阴天</span>
+                            </span>
+                        </label>
+                        <label class="option-label">
+                            <input type="radio" name="weather" value="rain" class="weather-radio">
+                            <span class="ml-2 flex items-center">
+                                <svg class="w-5 h-5 text-blue-500 inline-block" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path></svg>
+                                <span class="ml-1">下雨</span>
+                            </span>
+                        </label>
+                        <label class="option-label">
+                            <input type="radio" name="weather" value="snow" class="weather-radio">
+                            <span class="ml-2 flex items-center">
+                                <svg class="w-5 h-5 text-white inline-block" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v18m-6-8l12 0m-9.5-6.5l7 7m-7 0l7-7"></path></svg>
+                                <span class="ml-1">下雪</span>
+                            </span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- 3. 保存/取消按钮（修复自动模式下可点击） -->
+                <div class="flex justify-center space-x-3">
+                    <button id="settings-cancel" class="btn-secondary">取消</button>
+                    <button id="settings-save" class="btn-primary">保存设置</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 背包界面 -->
+    <div id="inventory-overlay" class="hidden">
+        <div class="inventory-panel">
+            <div class="inventory-header">
+                <h2>背包</h2>
+                <button id="inventory-close-btn" type="button">&times;</button>
+            </div>
+            <div class="inventory-content">
+                <div id="inventory-grid">
+                    <!-- 物品格子将动态生成 -->
+                </div>
+                <div id="inventory-actions" class="mt-4">
+                    <button id="view-artifact-btn" class="btn-primary w-full hidden">查看文物</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 拼图游戏界面 -->
+    <div id="puzzle-game-overlay" class="fixed inset-0 bg-background z-50 hidden flex flex-col">
+        <!-- 顶部标题栏 -->
+        <div class="bg-primary text-white p-3 flex justify-between items-center">
+            <div class="text-lg font-bold">拼图游戏</div>
+            <button id="puzzle-close-btn" class="text-white text-xl">&times;</button>
+        </div>
+
+        <!-- 游戏主体区域 -->
+        <div class="flex-1 p-4 overflow-auto">
+            <div class="max-w-4xl mx-auto">
+                <!-- 参考图片区域（左上角） -->
+                <div class="mb-4">
+                    <h3 class="text-lg font-bold mb-2 text-primary">参考图片</h3>
+                    <div class="bg-white rounded-lg p-2 shadow-md inline-block">
+                        <img id="reference-image" src="" alt="参考图片" class="w-32 h-32 object-contain" style="display: none;">
+                    </div>
+                </div>
+
+                <!-- 拼图区域（中间） -->
+                <div class="mb-4">
+                    <h3 class="text-lg font-bold mb-2 text-primary">拼图区域</h3>
+                    <div class="bg-white rounded-lg p-4 shadow-md inline-block">
+                        <div id="puzzle-area" class="relative border-2 border-primary rounded"></div>
+                    </div>
+                </div>
+
+                <!-- 拼图块存放区域（下面） -->
+                <div>
+                    <h3 class="text-lg font-bold mb-2 text-primary">拼图块</h3>
+                    <div class="bg-white rounded-lg p-4 shadow-md">
+                        <div id="puzzle-pieces-container" class="flex flex-wrap gap-2 justify-center"></div>
+                    </div>
+                </div>
+
+                <!-- 游戏控制按钮 -->
+                <div class="mt-4 flex justify-center gap-3">
+                    <button id="puzzle-reset-btn" class="btn-secondary">重新开始</button>
+                    <button id="puzzle-close-btn-bottom" class="btn-primary">关闭</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="puzzle-game.js" defer></script>
+    <script src="inventory.js" defer></script>
+    <script src="artifact-viewer.js" defer></script>
+    <script src="fragment-viewer.js" defer></script>
+    <script src="main.js" defer></script>
+</body>
+
